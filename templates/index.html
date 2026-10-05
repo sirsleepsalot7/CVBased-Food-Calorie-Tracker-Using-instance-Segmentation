@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vision-Based Food Calorie Tracker</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; background: #0f1117; color: #fff; text-align: center; }
+    h2 { margin: 18px 0 10px; font-weight: 600; letter-spacing: 0.5px; }
+    #feed-container { position: relative; display: inline-block; max-width: 720px; width: 92%; }
+    img, canvas { width: 100%; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+    canvas { display: none; }
+    .btn { background: #0066ff; color: white; border: none; padding: 12px 24px; font-size: 15px; font-weight: 600; border-radius: 8px; cursor: pointer; margin: 14px 0; transition: background 0.2s; }
+    .btn:hover { background: #0052cc; }
+    .btn.frozen { background: #e02424; }
+    .card { background: #1a1d24; margin: 10px auto 30px; padding: 18px; border-radius: 12px; max-width: 520px; text-align: left; box-shadow: 0 4px 16px rgba(0,0,0,0.3); }
+    ul { list-style: none; padding: 0; margin: 0; }
+    li { padding: 10px 0; border-bottom: 1px solid #2a2e39; display: flex; justify-content: space-between; font-size: 16px; }
+    li:last-child { border-bottom: none; }
+  </style>
+</head>
+<body>
+  <h2>Vision-Based Food Calorie Tracker</h2>
+  
+  <div id="feed-container">
+    <img id="stream" src="/video_feed" alt="Live Stream">
+    <canvas id="snapshot"></canvas>
+  </div>
+  
+  <div>
+    <button id="freeze-btn" class="btn" onclick="toggleFreeze()">Freeze Frame</button>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top: 0; font-size: 17px; color: #a0aec0;">Detected Nutrition</h3>
+    <ul id="nutrition-list">Scanning...</ul>
+  </div>
+
+  <script>
+    let isFrozen = false;
+
+    async function updateData() {
+      if (isFrozen) return;
+      try {
+        const res = await fetch('/data');
+        const data = await res.json();
+        const list = document.getElementById('nutrition-list');
+        if (data.length === 0) {
+          list.innerHTML = '<li style="color:#718096;">No target food detected</li>';
+          return;
+        }
+        list.innerHTML = data.map(d => 
+          `<li><span><b>${d.item.toUpperCase()}</b> (${d.mass_g}g)</span> <span><b style="color:#38a169;">${d.kcal}</b> kcal</span></li>`
+        ).join('');
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    function toggleFreeze() {
+      const img = document.getElementById('stream');
+      const canvas = document.getElementById('snapshot');
+      const btn = document.getElementById('freeze-btn');
+
+      isFrozen = !isFrozen;
+
+      if (isFrozen) {
+        canvas.width = img.naturalWidth || img.width;
+        canvas.height = img.naturalHeight || img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        img.style.display = 'none';
+        canvas.style.display = 'block';
+        btn.innerText = "Resume Live Feed";
+        btn.classList.add('frozen');
+      } else {
+        canvas.style.display = 'none';
+        img.style.display = 'block';
+        btn.innerText = "Freeze Frame";
+        btn.classList.remove('frozen');
+      }
+    }
+
+    setInterval(updateData, 400);
+  </script>
+</body>
+</html>

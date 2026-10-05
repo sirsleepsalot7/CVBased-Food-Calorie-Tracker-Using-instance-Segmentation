@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.pt
+food_dataset/
+food_dataset_yolo/
+fruits--1/
+runs/
