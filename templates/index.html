@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!-- <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -84,5 +84,260 @@
 
     setInterval(updateData, 400);
   </script>
+</body>
+</html> -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vision-Based Food Calorie Tracker</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 24px 16px;
+            min-height: 100vh;
+        }
+        h1 {
+            font-size: 1.75rem;
+            margin-bottom: 18px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+        .stream-container {
+            position: relative;
+            background: #1e293b;
+            border-radius: 14px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            max-width: 640px;
+            width: 100%;
+            border: 1px solid #334155;
+        }
+        .stream-container img, .stream-container canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+        }
+        .controls {
+            margin-top: 14px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: center;
+            width: 100%;
+            max-width: 640px;
+        }
+        .btn-freeze {
+            background-color: #2563eb;
+            color: #ffffff;
+            border: none;
+            padding: 10px 24px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+        }
+        .btn-freeze:hover {
+            background-color: #1d4ed8;
+        }
+        .btn-freeze:active {
+            transform: scale(0.98);
+        }
+        .btn-freeze.active {
+            background-color: #dc2626;
+            box-shadow: 0 4px 12px rgba(220, 38, 38, 0.35);
+        }
+        .nutrition-panel {
+            max-width: 640px;
+            width: 100%;
+            margin-top: 16px;
+            background: #1e293b;
+            border-radius: 14px;
+            padding: 20px;
+            border: 1px solid #334155;
+        }
+        .panel-header {
+            font-size: 1.05rem;
+            font-weight: 600;
+            margin-bottom: 14px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+        }
+        .food-card {
+            background: #0f172a;
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 12px;
+            border: 1px solid #334155;
+        }
+        .food-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #38bdf8;
+            margin-bottom: 12px;
+            text-transform: capitalize;
+        }
+        .food-title .mass {
+            font-size: 1rem;
+            color: #cbd5e1;
+            font-weight: 500;
+        }
+        .macro-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            text-align: center;
+        }
+        .macro-box {
+            background: #1e293b;
+            padding: 10px 6px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+        }
+        .macro-box .label {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        .macro-box .value {
+            font-size: 1.05rem;
+            font-weight: 700;
+        }
+        .c-cal { color: #f59e0b; }
+        .c-pro { color: #ef4444; }
+        .c-carb { color: #10b981; }
+        .c-fat { color: #8b5cf6; }
+        .empty-msg {
+            text-align: center;
+            color: #64748b;
+            padding: 24px;
+            font-size: 0.95rem;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Vision-Based Food Calorie Tracker</h1>
+
+    <div class="stream-container">
+        <!-- Live stream image -->
+        <img id="liveFeed" src="/video_feed" alt="Live Camera Feed" crossorigin="anonymous">
+        <!-- Snapshot canvas for frozen frame -->
+        <canvas id="frozenCanvas" style="display: none;"></canvas>
+    </div>
+
+    <!-- Freeze / Resume Stream Button -->
+    <div class="controls">
+        <button id="freezeBtn" class="btn-freeze" onclick="toggleFreeze()">Freeze Frame</button>
+    </div>
+
+    <div class="nutrition-panel">
+        <div class="panel-header">Detected Nutrition Breakdown</div>
+        <div id="nutrition-container">
+            <div class="empty-msg">No target food detected. Place food and reference coin in view.</div>
+        </div>
+    </div>
+
+    <script>
+        let isFrozen = false;
+        let frozenData = null;
+
+        function toggleFreeze() {
+            const img = document.getElementById('liveFeed');
+            const canvas = document.getElementById('frozenCanvas');
+            const btn = document.getElementById('freezeBtn');
+
+            if (!isFrozen) {
+                // Freeze: snapshot current frame onto canvas
+                canvas.width = img.naturalWidth || img.width || 640;
+                canvas.height = img.naturalHeight || img.height || 480;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+                // Swap views
+                img.style.display = 'none';
+                canvas.style.display = 'block';
+
+                btn.innerText = 'Resume Stream';
+                btn.classList.add('active');
+                isFrozen = true;
+            } else {
+                // Resume: restart live feed
+                canvas.style.display = 'none';
+                img.style.display = 'block';
+                // Cache-busting query to force browser to reconnect cleanly
+                img.src = '/video_feed?t=' + new Date().getTime();
+
+                btn.innerText = 'Freeze Frame';
+                btn.classList.remove('active');
+                isFrozen = false;
+            }
+        }
+
+        async function fetchNutrition() {
+            // When frozen, lock the nutritional data cards in place
+            if (isFrozen) return;
+
+            try {
+                const response = await fetch('/data');
+                const detections = await response.json();
+                const container = document.getElementById('nutrition-container');
+
+                if (!detections || detections.length === 0) {
+                    container.innerHTML = '<div class="empty-msg">No target food detected. Place food and reference coin in view.</div>';
+                    return;
+                }
+
+                container.innerHTML = detections.map(d => `
+                    <div class="food-card">
+                        <div class="food-title">
+                            <span>${d.name} <span style="font-size:0.8rem; color:#64748b;">(#${d.id || 0})</span></span>
+                            <span class="mass">${d.mass_g.toFixed(1)} g</span>
+                        </div>
+                        <div class="macro-grid">
+                            <div class="macro-box">
+                                <div class="label">Energy</div>
+                                <div class="value c-cal">${Math.round(d.calories)} <span style="font-size:0.7rem">kcal</span></div>
+                            </div>
+                            <div class="macro-box">
+                                <div class="label">Protein</div>
+                                <div class="value c-pro">${d.protein.toFixed(1)} <span style="font-size:0.7rem">g</span></div>
+                            </div>
+                            <div class="macro-box">
+                                <div class="label">Carbs</div>
+                                <div class="value c-carb">${d.carbs.toFixed(1)} <span style="font-size:0.7rem">g</span></div>
+                            </div>
+                            <div class="macro-box">
+                                <div class="label">Fat</div>
+                                <div class="value c-fat">${d.fat.toFixed(1)} <span style="font-size:0.7rem">g</span></div>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                console.error("Telemetry fetch error:", err);
+            }
+        }
+
+        setInterval(fetchNutrition, 500);
+    </script>
 </body>
 </html>

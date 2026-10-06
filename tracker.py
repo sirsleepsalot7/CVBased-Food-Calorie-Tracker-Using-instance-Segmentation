@@ -21,7 +21,7 @@ class FoodTracker:
         # Object tracking state: {id: {"centroid": (x,y), "mass": float, "last_seen": float}}
         self.tracked_objects = {}
         self.next_obj_id = 0
-        self.alpha = 0.15  # Heavy smoothing factor for rock-solid stability
+        self.alpha = 0.15
 
     def get_smoothed_ppm(self, raw_ppm):
         if raw_ppm is not None and raw_ppm > 0:
@@ -37,33 +37,23 @@ class FoodTracker:
         return None
 
     def estimate_volume(self, mask_pts, ppm, cls_name):
-        """
-        Calculates volume using food-geometry specific modeling:
-        - Elongated items (Banana, Cucumber): Curved cylinder approximation
-        - Round items (Apple, Orange, Guava, Tomato): Prolate Spheroid
-        """
         area_px = cv2.contourArea(mask_pts)
         if area_px <= 0 or ppm <= 0:
             return 0.0
 
         area_cm2 = area_px / (ppm ** 2)
 
-        # Bananas & long items: Volume ≈ Area * Average Thickness (thickness ≈ width ≈ 3.2cm)
+        # Elongated items: Curved cylinder approximation
         if "banana" in cls_name or "cucumber" in cls_name:
-            # Fit minimum area rectangle to get length and thickness
             rect = cv2.minAreaRect(mask_pts)
             (w_box, h_box) = rect[1]
             length_px = max(w_box, h_box)
             width_px = min(w_box, h_box)
             
             radius_cm = (width_px / ppm) / 2.0
-            # Physical constraint: banana cross-section radius is typically 1.3 - 1.8 cm
             radius_cm = max(1.1, min(radius_cm, 1.85))
-            
             length_cm = length_px / ppm
-            # Standard cylindrical volume formula with curvature reduction
-            volume_cm3 = math.pi * (radius_cm ** 2) * (length_cm * 0.85)
-            return volume_cm3
+            return math.pi * (radius_cm ** 2) * (length_cm * 0.85)
 
         # Round fruits: Prolate Spheroid
         if len(mask_pts) >= 5:
@@ -71,21 +61,18 @@ class FoodTracker:
             (_, (d1, d2), _) = ellipse
             a = (max(d1, d2) / 2.0) / ppm
             b = (min(d1, d2) / 2.0) / ppm
-            # Clamp height to width to prevent prolate inflation
             b = min(b, a * 0.95)
             return (4.0 / 3.0) * math.pi * a * (b ** 2)
 
-        # Fallback sphere from area
+        # Spherical fallback
         r_cm = math.sqrt(area_cm2 / math.pi)
         return (4.0 / 3.0) * math.pi * (r_cm ** 3)
 
     def match_track_id(self, centroid, current_time):
-        """Persistent nearest-neighbor object locking to eliminate flickering."""
         best_id = None
-        min_dist = 65  # Pixel threshold for same object
+        min_dist = 65
 
         for obj_id, data in list(self.tracked_objects.items()):
-            # Expire tracks not seen for 3 seconds
             if current_time - data["last_seen"] > 3.0:
                 del self.tracked_objects[obj_id]
                 continue
@@ -115,7 +102,7 @@ class FoodTracker:
         current_time = time.time()
         annotated_frame = frame.copy()
 
-        # 1. Scale Calibration (Filtered Coin Detection)
+        # 1. Scale Calibration
         raw_ppm, coin_pts = self.calibrator.calculate_ppm(frame)
         active_ppm = self.get_smoothed_ppm(raw_ppm)
         
@@ -172,7 +159,6 @@ class FoodTracker:
                 cv2.addWeighted(overlay, 0.35, annotated_frame, 0.65, 0, annotated_frame)
                 cv2.polylines(annotated_frame, [mask_pts], True, (0, 255, 0), 2)
 
-                # Consistent object tracking ID
                 obj_id = self.match_track_id(centroid, current_time)
 
                 mass_g, calories, protein, carbs, fat = 0.0, 0.0, 0.0, 0.0, 0.0
@@ -180,7 +166,6 @@ class FoodTracker:
                     vol = self.estimate_volume(mask_pts, active_ppm, cls_name)
                     raw_mass = vol * info["density_g_cm3"]
 
-                    # Smooth out frame-to-frame fluctuations
                     prev_mass = self.tracked_objects[obj_id]["mass"]
                     if prev_mass <= 1.0:
                         mass_g = raw_mass
@@ -194,7 +179,6 @@ class FoodTracker:
                     carbs = (mass_g / 100.0) * info["carbs_per_100g"]
                     fat = (mass_g / 100.0) * info["fat_per_100g"]
 
-                # HUD Tagging
                 title = f"{cls_name.upper()} #{obj_id} ({conf:.2f})"
                 sub1 = f"{mass_g:.1f}g | {calories:.0f} kcal" if active_ppm else "Calibrating scale..."
                 sub2 = f"P:{protein:.1f}g C:{carbs:.1f}g F:{fat:.1f}g" if active_ppm else "Place coin in view"
